@@ -8,7 +8,7 @@ library(ggplot2)
 #'
 #' Function Description
 #' @export
-plot_response_rates <- function(
+plot_response_rates_ql <- function(
     df, 
     group_labels = c("A" = "QL1706+LEV", "B" = "QL1706+LEV+CTX"),
     colors = c("A" = "#1f77b4", "B" = "#ff7f0e"),
