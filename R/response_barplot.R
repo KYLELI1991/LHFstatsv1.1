@@ -23,7 +23,7 @@ plot_response_rates <- function(
     response_levels = c("CR", "PR", "SD", "PD"),
     orr_levels = c("CR", "PR"),
     dcr_levels = c("CR", "PR", "SD"),
-
+    
     # 新增控制参数
     show_comparisons = TRUE,
     max_comparisons_show = NULL,
@@ -31,32 +31,32 @@ plot_response_rates <- function(
     comparison_spacing = 0.08,
     comparison_text_size = 3,
     comparison_line_size = 0.8,
-
+    
     rotate_x_labels = FALSE,
     x_label_angle = 45,
-
+    
     bar_width = 0.25,
     bar_alpha = 0.8,
-
+    
     show_orr_only = FALSE,
     show_dcr_only = FALSE,
-
+    
     # ===== 新增参数 =====
     show_cr = FALSE,        # 是否在ORR柱子中叠加显示CR部分（深色）
     show_dcr = TRUE,        # 是否显示DCR柱子
-
+    
     y_max_manual = NULL,
     y_breaks = seq(0, 1, by = 0.2),
-
+    
     show_legend = TRUE,
     legend_position = "top",
-
+    
     output_stats_only = FALSE,
-
+    
     show_p_value_table = FALSE,
     p_value_table_position = "bottom"
 ) {
-
+  
   # 加载必要的包
   if (!require(dplyr)) stop("需要安装dplyr包")
   if (!require(tidyr)) stop("需要安装tidyr包")
@@ -70,21 +70,21 @@ plot_response_rates <- function(
     warning("显示P值表格需要安装grid包，将不显示表格")
     show_p_value_table <- FALSE
   }
-
+  
   # 检查必要的列
   if (!group_col %in% colnames(df)) stop(paste("组别列", group_col, "不存在于数据框中"))
   if (!response_col %in% colnames(df)) stop(paste("响应列", response_col, "不存在于数据框中"))
-
+  
   # 重命名
   df <- df %>% rename(group = all_of(group_col), response = all_of(response_col))
-
+  
   if (!is.character(df$response) && !is.factor(df$response)) stop("响应列必须是字符型或因子型")
   if (!is.factor(df$response)) df$response <- factor(df$response, levels = response_levels)
-
+  
   groups <- unique(df$group)
   n_groups <- length(groups)
   if (n_groups < 2) stop("至少需要2个组进行比较")
-
+  
   # ===== 确定显示哪些类别 =====
   # show_dcr_only 优先级最高；否则 show_dcr=FALSE 等价于只显示ORR
   if (show_dcr_only) {
@@ -97,13 +97,13 @@ plot_response_rates <- function(
     display_orr <- TRUE
     display_dcr <- TRUE
   }
-
+  
   if (show_orr_only && show_dcr_only) {
     warning("show_orr_only和show_dcr_only不能同时为TRUE，将显示两者")
     display_orr <- TRUE
     display_dcr <- TRUE
   }
-
+  
   # 组标签
   if (is.null(group_labels)) {
     group_labels <- setNames(as.character(groups), groups)
@@ -111,7 +111,7 @@ plot_response_rates <- function(
     warning("组标签数量与组数不匹配，将使用组名作为标签")
     group_labels <- setNames(as.character(groups), groups)
   }
-
+  
   # 颜色
   if (is.null(colors)) {
     colors <- setNames(scales::hue_pal()(n_groups), groups)
@@ -119,7 +119,7 @@ plot_response_rates <- function(
     warning("颜色数量不足，将使用默认颜色")
     colors <- setNames(scales::hue_pal()(n_groups), groups)
   }
-
+  
   # 1. 计算 ORR / DCR / CR
   df <- df %>%
     mutate(
@@ -127,14 +127,14 @@ plot_response_rates <- function(
       DCR = ifelse(response %in% dcr_levels, 1, 0),
       CR  = ifelse(response %in% "CR", 1, 0)
     )
-
+  
   cat("数据摘要:\n")
   cat("组别分布:\n"); print(table(df$group))
   cat("\n响应分布:\n"); print(table(df$response))
   cat("\nORR定义:", paste(orr_levels, collapse = ", "), "\n")
   cat("DCR定义:", paste(dcr_levels, collapse = ", "), "\n")
   if (show_cr) cat("CR将在ORR柱子中以深色叠加显示\n")
-
+  
   # 2. 按组汇总
   summary_stats <- df %>%
     group_by(group) %>%
@@ -150,7 +150,7 @@ plot_response_rates <- function(
       DCR_se = sqrt(mean(DCR) * (1 - mean(DCR)) / n()),
       .groups = "drop"
     )
-
+  
   # 3. 置信区间
   calculate_ci <- function(success, total) {
     if (total == 0) return(c(0, 0))
@@ -159,7 +159,7 @@ plot_response_rates <- function(
     test <- prop.test(success, total, conf.level = 0.95)
     c(test$conf.int[1], test$conf.int[2])
   }
-
+  
   cis <- df %>%
     group_by(group) %>%
     summarise(
@@ -169,22 +169,22 @@ plot_response_rates <- function(
       DCR_ci_upper = calculate_ci(sum(DCR), n())[2],
       .groups = "drop"
     )
-
+  
   final_stats <- left_join(summary_stats, cis, by = "group") %>%
     mutate(
       PR_part_rate = ORR_rate - CR_rate   # ORR中PR部分的比例
     )
-
+  
   # 4. P值（两两比较）
   group_pairs <- combn(groups, 2, simplify = FALSE)
   n_comparisons <- length(group_pairs)
   p_values_raw <- list()
-
+  
   for (i in seq_along(group_pairs)) {
     pair <- group_pairs[[i]]
     pair_name <- paste(pair, collapse = "_vs_")
     stats_pair <- final_stats %>% filter(group %in% pair)
-
+    
     orr_test <- tryCatch(
       prop.test(x = stats_pair$n_ORR, n = stats_pair$n_total),
       error = function(e) { warning(paste("ORR比较", pair_name, "失败:", e$message)); list(p.value = NA) }
@@ -193,7 +193,7 @@ plot_response_rates <- function(
       prop.test(x = stats_pair$n_DCR, n = stats_pair$n_total),
       error = function(e) { warning(paste("DCR比较", pair_name, "失败:", e$message)); list(p.value = NA) }
     )
-
+    
     p_values_raw[[pair_name]] <- list(
       pair = pair,
       ORR_raw = ifelse(is.null(orr_test$p.value), NA, orr_test$p.value),
@@ -202,7 +202,7 @@ plot_response_rates <- function(
       DCR_test = dcr_test
     )
   }
-
+  
   p_values_adjusted <- list()
   if (p_adjust_method != "none" && n_comparisons > 1) {
     all_orr_p <- sapply(p_values_raw, function(x) x$ORR_raw)
@@ -233,7 +233,7 @@ plot_response_rates <- function(
       )
     }
   }
-
+  
   p_value_table_data <- NULL
   if (show_p_value_table) {
     p_value_table_data <- data.frame(
@@ -254,7 +254,7 @@ plot_response_rates <- function(
       paste(group_labels[x$pair[1]], "vs", group_labels[x$pair[2]])
     })
   }
-
+  
   if (output_stats_only) {
     return(list(
       stats = final_stats, p_values = p_values_adjusted,
@@ -262,12 +262,12 @@ plot_response_rates <- function(
       p_adjust_method = p_adjust_method, p_value_table = p_value_table_data
     ))
   }
-
+  
   # 5. 准备绘图数据
   categories_to_show <- c()
   category_labels <- c()
   x_base_map <- c()
-
+  
   if (display_orr) {
     categories_to_show <- c(categories_to_show, "ORR_rate")
     category_labels <- c(category_labels, "ORR")
@@ -278,7 +278,7 @@ plot_response_rates <- function(
     category_labels <- c(category_labels, "DCR")
     x_base_map["DCR_rate"] <- length(x_base_map) + 1
   }
-
+  
   plot_data <- final_stats %>%
     pivot_longer(cols = all_of(categories_to_show), names_to = "category", values_to = "rate") %>%
     mutate(
@@ -305,17 +305,17 @@ plot_response_rates <- function(
       ),
       x_base = x_base_map[category]
     )
-
+  
   # 组内偏移
   group_positions <- data.frame(
     group = groups,
     pos_offset = seq(-bar_width, bar_width, length.out = n_groups)
   )
-
+  
   plot_data <- plot_data %>%
     left_join(group_positions, by = "group") %>%
     mutate(x_position = x_base + pos_offset)
-
+  
   # ===== CR 叠加数据 =====
   cr_overlay_data <- NULL
   if (show_cr && display_orr) {
@@ -326,7 +326,7 @@ plot_response_rates <- function(
         pr_rate = PR_part_rate
       )
   }
-
+  
   # y_max
   if (!is.null(y_max_manual)) {
     y_max <- y_max_manual
@@ -338,7 +338,7 @@ plot_response_rates <- function(
       y_max <- max(y_max, max(plot_data$ci_upper, na.rm = TRUE) * (1 + n_show * comparison_spacing * 0.8))
     }
   }
-
+  
   # 6. 基础图形
   p <- ggplot() +
     geom_bar(
@@ -349,7 +349,7 @@ plot_response_rates <- function(
       alpha = bar_alpha,
       position = position_identity()
     )
-
+  
   # ===== 叠加 CR 柱子 =====
   if (!is.null(cr_overlay_data) && nrow(cr_overlay_data) > 0) {
     p <- p +
@@ -362,7 +362,7 @@ plot_response_rates <- function(
         position = position_identity()
       )
   }
-
+  
   # 误差线
   p <- p +
     geom_errorbar(
@@ -370,7 +370,7 @@ plot_response_rates <- function(
       aes(x = x_position, ymin = ci_lower, ymax = ci_upper),
       width = bar_width * 0.3, size = 0.8, color = "black"
     )
-
+  
   # 总百分比标签（柱顶）
   p <- p +
     geom_text(
@@ -378,7 +378,7 @@ plot_response_rates <- function(
       aes(x = x_position, y = rate, label = sprintf("%.1f%%", rate * 100)),
       vjust = -1.2, size = font_size * 0.3, fontface = "bold"
     )
-
+  
   # ===== CR / PR 内部标签 =====
   if (!is.null(cr_overlay_data) && nrow(cr_overlay_data) > 0) {
     # CR 标签（仅在CR比例足够大时显示）
@@ -404,7 +404,7 @@ plot_response_rates <- function(
         )
     }
   }
-
+  
   # CI 标签
   if (show_ci_labels && ci_label_position != "none") {
     ci_label_data <- plot_data %>% filter(!is.na(ci_y_position))
@@ -419,7 +419,7 @@ plot_response_rates <- function(
         )
     }
   }
-
+  
   # 样本量标签
   if (show_n_labels) {
     # 如果显示CR，样本量放到柱子顶部（避免与CR/PR标签重叠）
@@ -435,7 +435,7 @@ plot_response_rates <- function(
         size = font_size * 0.25, color = "white", fontface = "bold"
       )
   }
-
+  
   # 7. P值标注
   if (show_comparisons && p_value_shape != "none" && n_comparisons > 0) {
     n_show <- ifelse(is.null(max_comparisons_show), n_comparisons,
@@ -446,27 +446,27 @@ plot_response_rates <- function(
         sapply(p_values_list, function(x) min(x$ORR, x$DCR, na.rm = TRUE))
       )]
       base_y <- y_max * comparison_start_y
-
+      
       for (i in seq_along(p_values_list)) {
         comparison <- p_values_list[[i]]
         pair <- comparison$pair
         pos1 <- group_positions$pos_offset[group_positions$group == pair[1]]
         pos2 <- group_positions$pos_offset[group_positions$group == pair[2]]
         y_line <- base_y - (i - 1) * comparison_spacing * y_max
-
+        
         x_positions <- list()
         if (display_orr) x_positions$orr <- x_base_map["ORR_rate"]
         if (display_dcr) x_positions$dcr <- x_base_map["DCR_rate"]
-
+        
         for (cat_name in names(x_positions)) {
           cat_x_base <- x_positions[[cat_name]]
           p_value <- ifelse(cat_name == "orr", comparison$ORR, comparison$DCR)
           if (is.na(p_value)) next
-
+          
           x_start <- cat_x_base + pos1
           x_end <- cat_x_base + pos2
           x_mid <- (x_start + x_end) / 2
-
+          
           if (p_value_shape %in% c("bracket", "line", "dashed", "arrow")) {
             line_type <- ifelse(p_value_shape == "dashed", "dashed", "solid")
             p <- p +
@@ -498,7 +498,7 @@ plot_response_rates <- function(
       }
     }
   }
-
+  
   # 8. 多重比较校正说明
   if (p_adjust_method != "none" && n_comparisons > 1 && show_comparisons) {
     method_names <- c("bonferroni" = "Bonferroni", "holm" = "Holm",
@@ -509,7 +509,7 @@ plot_response_rates <- function(
                            method_names[p_adjust_method], p_adjust_method)
     p <- p + labs(caption = paste0("P值已使用", method_label, "方法进行多重比较校正"))
   }
-
+  
   # 9. X轴
   x_breaks <- sort(unique(plot_data$x_base))
   x_labels <- category_labels[order(x_base_map)]
@@ -520,7 +520,7 @@ plot_response_rates <- function(
       limits = c(min(x_breaks) - 0.5, max(x_breaks) + 0.5),
       expand = expansion(mult = 0.1)
     )
-
+  
   # 10. Y轴
   p <- p +
     scale_y_continuous(
@@ -529,18 +529,18 @@ plot_response_rates <- function(
       breaks = y_breaks,
       expand = expansion(mult = c(0, 0.05))
     )
-
+  
   # 11. 颜色
   p <- p +
     scale_fill_manual(values = colors, labels = group_labels, name = legend_title)
-
+  
   # 12. 标题（如果显示CR，在副标题中自动加说明）
   subtitle_final <- subtitle
   if (show_cr && display_orr) {
     subtitle_final <- paste0(subtitle, "  |  ORR bar: dark = CR, light = PR")
   }
   p <- p + labs(title = title, subtitle = subtitle_final, x = x_label, y = y_label)
-
+  
   # 13. 主题
   theme_args <- list(
     plot.title = element_text(hjust = 0.5, face = "bold", size = font_size + 2),
@@ -567,9 +567,9 @@ plot_response_rates <- function(
       hjust = 1, margin = margin(t = 5)
     )
   }
-
+  
   p <- p + do.call(theme_minimal, list(base_size = font_size)) + do.call(theme, theme_args)
-
+  
   # 14. P值表格
   if (show_p_value_table && !is.null(p_value_table_data)) {
     table_grob <- tableGrob(
@@ -587,7 +587,7 @@ plot_response_rates <- function(
       p <- gridExtra::grid.arrange(p, table_grob, ncol = 2, widths = c(3, 1.5))
     }
   }
-
+  
   return(list(
     plot = p, stats = final_stats, p_values = p_values_adjusted,
     comparisons = group_pairs, n_comparisons = n_comparisons,
@@ -595,44 +595,3 @@ plot_response_rates <- function(
     colors = colors, plot_data = plot_data, p_value_table = p_value_table_data
   ))
 }
-
-
-# 使用例子
-if(F){
-    
-# 显示 ORR（含 CR 深色叠加）+ DCR
-df <- data_plot_wf
-plot_response_rates(df, group_col = "cohort", response_col = "response",
-                    show_cr = TRUE, show_dcr = TRUE)
-
-# 只显示 ORR（含 CR 叠加）
-plot_response_rates(df, group_col = "cohort", response_col = "response",
-                    show_cr = TRUE, show_dcr = FALSE)
-
-# 原行为：ORR + DCR 单层柱
-plot_response_rates(df, group_col = "cohort", response_col = "response",
-                    show_cr = FALSE, show_dcr = TRUE)
-
-result_custom <- plot_response_rates(
-  df = data_plot_wf,
-  group_col = "cohort",
-  # 自定义组标签
-  group_labels = c("Cohort1: SHR-A1811+Adebrelimab", 
-                   "Cohort2: SHR-A1811+Adebrelimab", 
-                   "Cohort3: SHR-A1811"),
-  # 自定义颜色
-  colors = c("#4B32C9", "#32B0C9", "#B0C932", "#C94B32"),
-  title = "Best of response by cohort",
-  subtitle = paste0("By LHF; ",date),
-  response_col = "response",
-  response_levels = c("CR", "PR", "SD", "PD", "NE"),  # 包含NE
-  orr_levels = c("CR", "PR"),                          # ORR定义
-  dcr_levels = c("CR", "PR", "SD"),                    # DCR定义
-  p_adjust_method = "none",
-  show_comparisons = F,
-  show_ci_labels = F,
-  show_cr = T,show_dcr = F
-)
-
-print(result_custom$plot)
-    }
