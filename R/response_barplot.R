@@ -595,3 +595,43 @@ plot_response_rates <- function(
     colors = colors, plot_data = plot_data, p_value_table = p_value_table_data
   ))
 }
+
+# sample
+if(F){
+  # 显示 ORR（含 CR 深色叠加）+ DCR
+  df <- data_plot_wf
+  plot_response_rates(df, group_col = "cohort", response_col = "response",
+                      show_cr = TRUE, show_dcr = TRUE)
+  
+  # 只显示 ORR（含 CR 叠加）
+  plot_response_rates(df, group_col = "cohort", response_col = "response",
+                      show_cr = TRUE, show_dcr = FALSE)
+  
+  # 原行为：ORR + DCR 单层柱
+  plot_response_rates(df, group_col = "cohort", response_col = "response",
+                      show_cr = FALSE, show_dcr = TRUE)
+  
+  result_custom <- plot_response_rates(
+    df = data_plot_wf,
+    group_col = "cohort",
+    # 自定义组标签
+    group_labels = c("Cohort1: SHR-A1811+Adebrelimab", 
+                     "Cohort2: SHR-A1811+Adebrelimab", 
+                     "Cohort3: SHR-A1811"),
+    # 自定义颜色
+    colors = c("#4B32C9", "#32B0C9", "#B0C932", "#C94B32"),
+    title = "Best of response by cohort",
+    subtitle = paste0("By LHF; ",date),
+    response_col = "response",
+    response_levels = c("CR", "PR", "SD", "PD", "NE"),  # 包含NE
+    orr_levels = c("CR", "PR"),                          # ORR定义
+    dcr_levels = c("CR", "PR", "SD"),                    # DCR定义
+    p_adjust_method = "none",
+    show_comparisons = F,
+    show_ci_labels = F,
+    show_cr = T,show_dcr = F
+  )
+  
+  print(result_custom$plot)
+  
+}
